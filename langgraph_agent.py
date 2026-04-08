@@ -53,11 +53,17 @@ def retrieve_node(state: AgentState):
     question = state["question"]
     llm = get_llm()
     
-    # --- [START] Improved Routing Logic ---
-    options = list(FILES.keys()) + ["both", "none"]
+    # --- [START] Task B: Intelligent Router ---
+    options = ["apple", "tesla", "both", "none"]
     router_prompt = f"""
     Analyze the user question and route it to the correct data source.
-    Options: {', '.join(options)}.
+    You MUST classify the question into one of the following categories: {options}.
+    
+    CRITICAL: 
+    - If the user mentions "Apple", choose "apple".
+    - If "Tesla", choose "tesla".
+    - If both or comparison, choose "both".
+    - If none, choose "none".
     
     Output ONLY valid JSON: {{"datasource": "..."}}
     User Question: {question}
@@ -66,7 +72,6 @@ def retrieve_node(state: AgentState):
     try:
         response = llm.invoke(router_prompt)
         content = response.content.strip()
-        # Handle cases where LLM might wrap JSON in backticks
         if "```json" in content:
             content = content.split("```json")[1].split("```")[0].strip()
         elif "```" in content:
@@ -74,12 +79,14 @@ def retrieve_node(state: AgentState):
             
         res_json = json.loads(content)
         target = res_json.get("datasource", "both")
+        if target not in options:
+            target = "both"
     except Exception as e:
         print(colored(f"⚠️ Error parsing router output: {e}. Defaulting to 'both'.", "yellow"))
         target = "both"
     
     print(colored(f"🎯 Routing to: {target}", "cyan"))
-    # --- [END] ---
+    # --- [END] Task B ---
 
     docs_content = ""
     targets_to_search = []
@@ -103,10 +110,13 @@ def grade_documents_node(state: AgentState):
     documents = state["documents"]
     llm = get_llm()
 
-    system_prompt = """You are a grader assessing relevance. 
-    Does the retrieved document contain information related to the user question?
+    # --- [START] Task C: Relevance Grader ---
+    system_prompt = """You are a "Binary Judge". Your goal is to evaluate if the retrieved documents are relevant to the user's question.
+    - If the document contains information that could help answer the question, output 'yes'.
+    - If the document is irrelevant or noise, output 'no'.
     
-    CRITICAL: You must answer with ONLY one word: 'yes' or 'no'. Do not add any explanation."""
+    CRITICAL: You must answer with ONLY one word: 'yes' or 'no'."""
+    # --- [END] Task C ---
     
     msg = [
         SystemMessage(content=system_prompt),
@@ -127,12 +137,20 @@ def generate_node(state: AgentState):
     documents = state["documents"]
     llm = get_llm() 
     
+    # --- [START] Task E: Final Generator ---
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a financial analyst. Use the provided context to answer the question. \n"
-                   "If the context doesn't contain the answer, say you don't know. \n"
-                   "ALWAYS cite the source in brackets (e.g., [Source: Apple]).\n\nContext:\n{context}"),
+        ("system", """You are a professional financial analyst. Synthesize the final answer using the retrieved context.
+        
+        REQUIREMENTS:
+        1. English Only: The answer must be in English.
+        2. Citations: Strictly cite sources (e.g., [Source: Apple 10-K] or [Source: Tesla]).
+        3. Honesty: If the specific figure or information is missing after retrieval, honestly state "I don't know" instead of hallucinating.
+        
+        Context:
+        {context}"""),
         ("human", "{question}"),
     ])
+    # --- [END] Task E ---
     
     chain = prompt | llm
     response = chain.invoke({"context": documents, "question": question})
@@ -144,11 +162,15 @@ def rewrite_node(state: AgentState):
     question = state["question"]
     llm = get_llm()
     
+    # --- [START] Task D: Query Rewriter ---
     msg = [ 
-        HumanMessage(content=f"The previous search for '{question}' yielded irrelevant results. \n"
-                             f"Please rephrase this question to be more specific or use better keywords for a financial search engine. \n"
-                             f"Output ONLY the new question text.")
+        HumanMessage(content=f"""The previous search for '{question}' yielded irrelevant results. 
+        Your goal is to rewrite the original question to be more specific or use better financial terminology.
+        Transform vague queries (e.g., "how much did they spend on new tech") into precise terms (e.g., "Research and Development expenses").
+        
+        Output ONLY the new question text.""")
     ]
+    # --- [END] Task D ---
     response = llm.invoke(msg)
     new_query = response.content.strip()
     print(f"   New Question: {new_query}")
@@ -215,9 +237,15 @@ def run_legacy_agent(question: str):
 
     llm = get_llm()
 
+    # --- [START] Task A: LangChain ReAct Agent ---
     template = """Answer the following questions as best you can. You have access to the following tools:
 
 {tools}
+
+RELEVANT CONSTRAINTS:
+1. English Only: The Final Answer must be in English, even if the user asks in Chinese.
+2. Year Precision: Distinguish between 2024, 2023, and 2022 columns in financial tables very carefully.
+3. Honesty: If the exact figure (especially for 2024) is not found, say "I don't know" rather than guessing.
 
 Use the following format:
 
@@ -228,12 +256,13 @@ Action Input: the input to the action
 Observation: the result of the action
 ... (this Thought/Action/Action Input/Observation can repeat N times)
 Thought: I now know the final answer
-Final Answer: the final answer to the original input question
+Final Answer: the final answer to the original input question in English
 
 Begin!
 
 Question: {input}
 Thought: {agent_scratchpad}"""
+    # --- [END] Task A ---
 
     prompt = PromptTemplate.from_template(template)
     prompt = prompt.partial(
