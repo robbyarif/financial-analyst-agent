@@ -1,68 +1,30 @@
-**You can edit functions in `graph_agent.py`, and in evaluator.py can change test_mode (LEGACY is langchain mode, GRAPH is langgraph)**  
+# 📊 Autonomous Multi-Doc Financial Analyst (LangGraph RAG)
 
-# 🛠️ Prerequisites
-Before you begin, ensure you have the following installed:
+This repository contains an autonomous financial research agent built with **LangGraph** and **LangChain**. It can research Apple and Tesla financial reports, perform cross-document comparisons, and self-correct its search queries to improve accuracy.
 
-* Python 3.11 (Strict requirement) 
+## 🚀 Features
+- **Intelligent Routing**: Automatically routes questions to Apple, Tesla, or both databases.
+- **Binary Grading**: A judge evaluates retrieved document relevance before answering.
+- **Query Rewriting**: If initial search results are irrelevant, the agent rephrases the question using professional financial terminology.
+- **State-Aware Reasoning**: Uses LangGraph to manage the cyclic flow and "memory" of the search process.
+- **ReAct Baseline**: Includes a legacy LangChain ReAct agent for performance benchmarking.
 
-* Google Cloud API Key or other LLM Key
-# ⚙️ Environment Setup
-### 1. Virtual Environment Setup
+## ⚙️ Setup
+1. **Environment**: Python 3.11+
+2. **Install Dependencies**: `uv pip install -r requirements.txt` (or use `pip`)
+3. **API Keys**: Configure `GOOGLE_API_KEY` in `.env`.
 
-It is highly recommended to use a virtual environment to manage dependencies.
+## 📂 Project Structure
+- `langgraph_agent.py`: Main agent logic (Nodes, Edges, State).
+- `build_rag.py`: ETL pipeline for PDF ingestion and vector indexing.
+- `evaluator.py`: Automated benchmarking suite with LLM-as-a-Judge.
+- `config.py`: Centralized configuration for models and paths.
+- `report.md`: Detailed analysis of benchmarking results (LangGraph vs LangChain, Embedding Models, Chunk Sizes).
 
-**For macOS / Linux:**
-```
-# Create virtual environment
-python -m venv venv
+## 📊 Benchmarking Results Summary
+- **LangGraph vs LangChain**: LangGraph achieved an **8/14** score compared to **6/14** for the legacy agent, primarily due to its ability to recover from failed searches via the Query Rewriter.
+- **Embedding Model**: `all-MiniLM-L6-v2` outperformed the multilingual variant by providing better semantic matching for specific financial terms in English.
+- **Chunk Size Trade-off**: Large chunks (2000) showed superior context completeness for complex balance sheet tables, while small chunks (1000) provided higher precision for simple fact extraction.
 
-# Activate environment
-source venv/bin/activate
-```
-**For Windows:**
-```
-# Create virtual environment
-python -m venv venv
-
-# Activate environment
-venv\Scripts\activate
-```
-
-### 2. Install Dependencies
-
-`pip install -r requirements.txt`
-
-### 3. Environment Variables (.env)
-
-Rename the file `.env_example` to `.env` in the root directory and add your API_KEY
-
-# 📂 File Descriptions
-
-* **data/:** Folder containing the raw PDF financial reports
-* **langgraph_agent.py:** [MAIN WORKSPACE] This is where you will write your code. It contains the logic for:
-  * PDF Ingestion: `initialize_vector_dbs()`
-
-  *  Graph Nodes: `retrieve_node`, `grade_documents_node`, `generate_node`, `rewrite_node`.
-
-  *  Legacy Agent: `run_legacy_agent` (The baseline for comparison).
-* **evaluator.py:** The benchmark testing script. It runs a suite of test cases (Apple Revenue, Tesla R&D, Comparison, Traps) and uses "LLM-as-a-Judge" to score your agent (Pass/Fail).
-* **config.py:** Configuration file that handles API key loading and initializes the LLM and Embedding models.
-
-
-# 📝 Student Tasks
-**You need to complete the TODO sections in `langgraph_agent.py`.**
-* Task 1 (Legacy): Implement the run_legacy_agent Prompt Template to establish a baseline (langchain).
-
-* Task 2 (Router): Implement the retrieve_node logic to route queries to "apple", "tesla", or "both".
-
-* Task 3 (Grader): Implement the grade_documents_node to filter out irrelevant documents.
-
-* Task 4 (Generator): Implement the generate_node to answer questions in English with Citations.
-
-* Task 5 (Rewriter): Implement the rewrite_node to refine search queries when retrieval fails.
-
-# 🚀 Execution Order
-
-* Step1: `python build_rag.py`: Before running any agents, you must ingest the PDFs and convert them into vector embeddings. This allows you to experiment with different chunking strategies without re-running the evaluation logic every time.
-* Step2: `python evaluator.py`: Once the database is ready, run the evaluator to benchmark your agent.
-  
+---
+**Developed for NCU Agentic AI Course.**
