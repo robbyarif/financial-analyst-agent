@@ -61,8 +61,8 @@ def build_vector_dbs():
             doc.page_content = clean_text(doc.page_content)
 
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,     # Reduced slightly for better retrieval precision
-            chunk_overlap=200,   
+            chunk_size=2000,     # Increased to ensure entire financial tables stay within one chunk
+            chunk_overlap=400,   # Increased overlap for better context preservation
             separators=["\n\n", "\n", " ", ""] 
         )
 

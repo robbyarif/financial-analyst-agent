@@ -13,7 +13,7 @@ from langgraph_agent import run_graph_agent, run_legacy_agent
 from config import get_llm
 from langchain_core.prompts import ChatPromptTemplate
 
-TEST_MODE = "LEGACY" # Options: "GRAPH" or "LEGACY"
+TEST_MODE = "GRAPH" # Options: "GRAPH" or "LEGACY"
 
 class DualLogger:
     def __init__(self, filename="evaluation_log.txt"):
@@ -64,34 +64,37 @@ def grade_answer_with_llm(question, agent_answer, expected_facts, forbidden_fact
 TEST_CASES = [
     {
         "name": "Test A: Apple Revenue",
-        "question": "Apple 2024 年的總營收 (Total net sales) 是多少？",
+        "question": "Apple 2024 年的總營收 (Total net sales) 是多少？",  # What was Apple's total net sales in 2024?
         "must_contain": ["391", "billion"],
         "forbidden": ["Tesla"]
     },
     {
         "name": "Test B: Tesla R&D",
-        "question": "Tesla 2024 年的研發費用 (R&D expenses) 是多少？",
-        "must_contain": ["4.77", "billion"],
+        "question": "Tesla 2024 年的研發費用 (R&D expenses) 是多少？",  # What was Tesla's R&D expenses in 2024?
+        "must_contain": ["4.77", "billion"], # NOTE: PDF tsla-20241231-gen.pdf shows 4,540 (millions)
         "forbidden": ["Apple"]
     },
+
     {
         "name": "Test D: Apple Services Cost",
-        "question": "Apple 2024 年的「服務成本 (Cost of sales - Services)」是多少？",
+        "question": "Apple 2024 年的「服務成本 (Cost of sales - Services)」是多少？",  # What was Apple's "Cost of sales - Services" in 2024?
         "must_contain": ["25", "billion", "25,119"],
         "forbidden": []
     },
     {
         "name": "Test E: Tesla Energy Revenue",
-        "question": "Tesla 2024 年的「能源發電與儲存 (Energy generation and storage)」營收是多少？",
-        "must_contain": ["23.7", "billion", "23,767"],
+        "question": "Tesla 2024 年的「能源發電與儲存 (Energy generation and storage)」營收是多少？",  # What was Tesla's "Energy generation and storage" revenue in 2024?
+        "must_contain": ["23.7", "billion", "23,767"], # NOTE: PDF shows 10,086 (millions)
         "forbidden": []
     },
+
     {
         "name": "Test G: Unknown Info",
-        "question": "Apple 計畫在 2025 年發布的 iPhone 17 預計售價是多少？",
-        "must_contain": ["unknown", "provide", "mention", "does not", "無法", "未提及"],
+        "question": "Apple 計畫在 2025 年發布的 iPhone 17 預計售價是多少？",  # What is the expected price of iPhone 17 planned for release in 2025?
+        "must_contain": ["unknown", "provide", "mention", "does not", "無法", "未提及"], # "無法" (unable), "未提及" (not mentioned)
         "forbidden": ["1000", "999", "1200"] 
     },
+
     {
         "name": "Test A1 [Eng]: Apple Revenue",
         "question": "What was Apple's Total Net Sales for the fiscal year 2024?",
@@ -101,22 +104,24 @@ TEST_CASES = [
     {
         "name": "Test A2 [Eng]: Tesla Automotive Revenue",
         "question": "What is the specific revenue figure for 'Automotive sales' for Tesla in 2024?",
-        "must_contain": ["78", "billion", "78,512"], 
+        "must_contain": ["78", "billion", "78,512"], # NOTE: PDF shows 72,480 (millions)
         "forbidden": ["Apple"]
     },
 
+
     {
         "name": "Test B1 [Mixed]: Apple R&D",
-        "question": "Apple 2024 年的研發費用 (Research and development expenses) 是多少？",
+        "question": "Apple 2024 年的研發費用 (Research and development expenses) 是多少？",  # What was Apple's Research and development expenses in 2024?
         "must_contain": ["31", "billion", "31,370"], 
         "forbidden": ["Tesla"]
     },
     {
         "name": "Test B2 [Mixed]: Tesla CapEx",
-        "question": "Tesla 在 2024 年的資本支出 (Capital Expenditures) 是多少？",
+        "question": "Tesla 在 2024 年的資本支出 (Capital Expenditures) 是多少？",  # What was Tesla's Capital Expenditures in 2024?
         "must_contain": ["11", "billion", "11,153"], 
         "forbidden": ["Apple"]
     },
+
     {
         "name": "Test C1 [Eng]: R&D Comparison",
         "question": "Compare the Research and Development (R&D) expenses of Apple and Tesla in 2024. Who spent more?",
@@ -139,10 +144,11 @@ TEST_CASES = [
     
     {
         "name": "Test E1 [Mixed]: 2025 Projection (Trap)",
-        "question": "財報中有提到 Apple 2025 年預計的 iPhone 銷量目標嗎？",
-        "must_contain": ["no", "not mentioned", "does not provide", "沒有提到", "未知"], 
+        "question": "財報中有提到 Apple 2025 年預計的 iPhone 銷量目標嗎？",  # Does the financial report mention Apple's expected iPhone sales target for 2025?
+        "must_contain": ["no", "not mentioned", "does not provide", "沒有提到", "未知"], # "沒有提到" (not mentioned), "未知" (unknown)
         "forbidden": ["100 million", "200 million", "increase"]
     },
+
     
     {
         "name": "Test F1 [Eng]: CEO Identity",

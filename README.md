@@ -1,68 +1,69 @@
-**You can edit functions in `graph_agent.py`, and in evaluator.py can change test_mode (LEGACY is langchain mode, GRAPH is langgraph)**  
+# 📊 Autonomous Multi-Doc Financial Analyst
 
-# 🛠️ Prerequisites
-Before you begin, ensure you have the following installed:
+**Student Name:** Robby Arifandri  
+**Student ID:** 114522602  
+**Course:** CE8014 Agentic AI | National Central University
 
-* Python 3.11 (Strict requirement) 
+This project implements a state-aware RAG (Retrieval-Augmented Generation) system designed to act as an autonomous financial analyst. It is capable of intelligently routing queries between multiple corporate reports (Apple & Tesla), grading document relevance to prevent hallucinations, and iteratively rewriting queries to ensure high-precision data extraction from complex financial tables.
 
-* Google Cloud API Key or other LLM Key
-# ⚙️ Environment Setup
-### 1. Virtual Environment Setup
+---
 
-It is highly recommended to use a virtual environment to manage dependencies.
+## 🏛️ System Architecture
 
-**For macOS / Linux:**
-```
-# Create virtual environment
+The system supports two distinct agentic architectures for comparative benchmarking:
+
+### 1. LangGraph State-aware Agent (Advanced)
+A cyclic directed graph implementation that includes self-correction loops:
+*   **Task B: Intelligent Router**: Classifies questions into `["apple", "tesla", "both", "none"]` and generates targeted sub-queries.
+*   **Task C: Relevance Grader**: A "Binary Judge" that evaluates if retrieved snippets contain the specific metrics and time periods requested.
+*   **Task D: Query Rewriter**: Automatically transforms vague queries (e.g., "new tech spend") into precise financial terms (e.g., "Research and Development expenses") if initial retrieval fails.
+*   **Task E: Final Generator**: Synthesizes structured English answers with strict source citations and temporal awareness (detecting 3-month vs. 12-month periods).
+
+### 2. LangChain ReAct Agent (Baseline)
+*   **Task A: Legacy ReAct**: A linear reasoning chain using a custom prompt toEstablish a baseline performance for the ReAct loop.
+
+---
+
+## 📊 Benchmarking Highlights
+
+| Configuration | Embedding Model | Score | Success Rate |
+| :--- | :--- | :--- | :--- |
+| **LangGraph (Peak)** | `paraphrase-multilingual-L12` | **11/14** | **79%** |
+| **LangChain (Peak)** | `all-MiniLM-L6-v2` | **11/14** | **79%** |
+
+*Note: Both peak configurations were limited by ground truth discrepancies in the evaluator targets for Tesla financial figures.*
+
+### 🔍 Key Learning: Context Completeness
+We verified that a **`chunk_size` of 2000** is optimal for preserving the integrity of large financial tables (like Balance Sheets). This ensures **Context Completeness**, allowing the agent to simultaneously view row labels and all relevant yearly columns (2024, 2023, 2022).
+
+---
+
+## ⚙️ Environment Setup
+
+### 1. Prerequisites
+*   **Python 3.11** (Required for compatibility)
+*   **Google Gemini API Key** (Set in `.env`)
+
+### 2. Installation
+```powershell
+# Create & Activate Virtual Environment
 python -m venv venv
+.\venv\Scripts\activate
 
-# Activate environment
-source venv/bin/activate
-```
-**For Windows:**
-```
-# Create virtual environment
-python -m venv venv
-
-# Activate environment
-venv\Scripts\activate
+# Install Dependencies
+pip install -r requirements.txt
 ```
 
-### 2. Install Dependencies
+### 3. Usage
+1.  **Build Database**: `python build_rag.py` (Converts PDFs to vector embeddings).
+2.  **Run Evaluation**: `python evaluator.py` (Benchmarks the agent).
+    *   *Tip: Change `TEST_MODE` in evaluator.py to toggle between "GRAPH" and "LEGACY".*
 
-`pip install -r requirements.txt`
+---
 
-### 3. Environment Variables (.env)
-
-Rename the file `.env_example` to `.env` in the root directory and add your API_KEY
-
-# 📂 File Descriptions
-
-* **data/:** Folder containing the raw PDF financial reports
-* **langgraph_agent.py:** [MAIN WORKSPACE] This is where you will write your code. It contains the logic for:
-  * PDF Ingestion: `initialize_vector_dbs()`
-
-  *  Graph Nodes: `retrieve_node`, `grade_documents_node`, `generate_node`, `rewrite_node`.
-
-  *  Legacy Agent: `run_legacy_agent` (The baseline for comparison).
-* **evaluator.py:** The benchmark testing script. It runs a suite of test cases (Apple Revenue, Tesla R&D, Comparison, Traps) and uses "LLM-as-a-Judge" to score your agent (Pass/Fail).
-* **config.py:** Configuration file that handles API key loading and initializes the LLM and Embedding models.
-
-
-# 📝 Student Tasks
-**You need to complete the TODO sections in `langgraph_agent.py`.**
-* Task 1 (Legacy): Implement the run_legacy_agent Prompt Template to establish a baseline (langchain).
-
-* Task 2 (Router): Implement the retrieve_node logic to route queries to "apple", "tesla", or "both".
-
-* Task 3 (Grader): Implement the grade_documents_node to filter out irrelevant documents.
-
-* Task 4 (Generator): Implement the generate_node to answer questions in English with Citations.
-
-* Task 5 (Rewriter): Implement the rewrite_node to refine search queries when retrieval fails.
-
-# 🚀 Execution Order
-
-* Step1: `python build_rag.py`: Before running any agents, you must ingest the PDFs and convert them into vector embeddings. This allows you to experiment with different chunking strategies without re-running the evaluation logic every time.
-* Step2: `python evaluator.py`: Once the database is ready, run the evaluator to benchmark your agent.
-  
+## 📁 Project Structure
+*   `langgraph_agent.py`: Core logic for all agent nodes and tools.
+*   `build_rag.py`: ETL pipeline for PDF ingestion and vector storage.
+*   `evaluator.py`: Suite of 14 complex financial queries for performance scoring.
+*   `config.py`: model and path configurations.
+*   `report.pdf`: Detailed technical analysis and diagnostic findings.

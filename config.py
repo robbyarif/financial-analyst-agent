@@ -24,7 +24,8 @@ FILES = {
 # ==============================================================================
 # 3. Embedding Model (Can Change)
 # ==============================================================================
-LOCAL_EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+# LOCAL_EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+LOCAL_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 def get_embeddings():
     print(colored(f"🔄 Loading Local Embedding Model: {LOCAL_EMBEDDING_MODEL}...", "cyan"))

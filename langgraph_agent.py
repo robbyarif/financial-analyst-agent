@@ -28,7 +28,7 @@ def initialize_vector_dbs():
 
         if os.path.exists(persist_dir):
             vectorstore = Chroma(persist_directory=persist_dir, embedding_function=embeddings)
-            retrievers[key] = vectorstore.as_retriever(search_kwargs={"k": 3})
+            retrievers[key] = vectorstore.as_retriever(search_kwargs={"k": 6})
         else:
             print(colored(f"❌ Error: Database for '{key}' not found!", "red"))
             print(colored(f"⚠️ Please run 'python build_rag.py' first.", "yellow"))
@@ -52,46 +52,81 @@ def retrieve_node(state: AgentState):
     print(colored("--- 🔍 RETRIEVING ---", "blue"))
     question = state["question"]
     llm = get_llm()
-    
-    # --- [START] Improved Routing Logic ---
-    options = list(FILES.keys()) + ["both", "none"]
+
+    # Task B: LangGraph - Intelligent Router
+    options = ["apple", "tesla", "both", "none"]
     router_prompt = f"""
-    Analyze the user question and route it to the correct data source.
-    Options: {', '.join(options)}.
+    Analyze the user question and classify it into one of four categories: {options}.
+    
+    GUIDELINES:
+    - If it mentions 'Apple', use 'apple'.
+    - If it mentions 'Tesla', use 'tesla'.
+    - If it mentions both or is a comparison, use 'both'.
+    - If it mentions neither, use 'none'.
     
     Output ONLY valid JSON: {{"datasource": "..."}}
     User Question: {question}
     """
-    
     try:
         response = llm.invoke(router_prompt)
         content = response.content.strip()
-        # Handle cases where LLM might wrap JSON in backticks
         if "```json" in content:
             content = content.split("```json")[1].split("```")[0].strip()
         elif "```" in content:
             content = content.split("```")[1].split("```")[0].strip()
-            
         res_json = json.loads(content)
         target = res_json.get("datasource", "both")
+        if target not in options:
+            target = "both"
     except Exception as e:
-        print(colored(f"⚠️ Error parsing router output: {e}. Defaulting to 'both'.", "yellow"))
+        print(colored(f"⚠️ Router error: {e}. Defaulting to 'both'.", "yellow"))
         target = "both"
-    
+
     print(colored(f"🎯 Routing to: {target}", "cyan"))
-    # --- [END] ---
 
     docs_content = ""
-    targets_to_search = []
+
     if target == "both":
-        targets_to_search = list(FILES.keys())
+        # Step 2 (NEW): Generate highly specific sub-queries to ensure we get ANNUAL data
+        subquery_prompt = f"""
+        The user asked: "{question}"
+        This question requires data from multiple financial sources: {list(FILES.keys())}.
+        
+        For each source, write a HIGHLY SPECIFIC retrieval query. 
+        Focus on "Full Year 2024", "Annual Report", "12 Months Ended", or "Consolidated Statement of Operations".
+        
+        Output ONLY valid JSON like:
+        {{
+            "apple": "Apple 2024 annual total net sales consolidated statement of operations",
+            "tesla": "Tesla 2024 full year R&D expenses consolidated income statement"
+        }}
+        Only include keys for sources in: {list(FILES.keys())}
+        """
+
+        try:
+            sq_response = llm.invoke(subquery_prompt)
+            sq_content = sq_response.content.strip()
+            if "```json" in sq_content:
+                sq_content = sq_content.split("```json")[1].split("```")[0].strip()
+            elif "```" in sq_content:
+                sq_content = sq_content.split("```")[1].split("```")[0].strip()
+            subqueries = json.loads(sq_content)
+            print(colored(f"📝 Sub-queries: {subqueries}", "cyan"))
+        except Exception as e:
+            print(colored(f"⚠️ Sub-query generation failed: {e}. Falling back to original question.", "yellow"))
+            subqueries = {key: question for key in FILES.keys()}
+
+        for key, sub_q in subqueries.items():
+            if key in RETRIEVERS:
+                docs = RETRIEVERS[key].invoke(sub_q)
+                source_name = key.capitalize()
+                docs_content += f"\n\n[Source: {source_name}]\n" + "\n".join([d.page_content for d in docs])
+
     elif target in FILES:
-        targets_to_search = [target]
-    
-    for t in targets_to_search:
-        if t in RETRIEVERS:
-            docs = RETRIEVERS[t].invoke(question)
-            source_name = t.capitalize()
+        # Single-source path: unchanged
+        if target in RETRIEVERS:
+            docs = RETRIEVERS[target].invoke(question)
+            source_name = target.capitalize()
             docs_content += f"\n\n[Source: {source_name}]\n" + "\n".join([d.page_content for d in docs])
 
     return {"documents": docs_content, "search_count": state["search_count"] + 1}
@@ -103,10 +138,15 @@ def grade_documents_node(state: AgentState):
     documents = state["documents"]
     llm = get_llm()
 
-    system_prompt = """You are a grader assessing relevance. 
-    Does the retrieved document contain information related to the user question?
+    # Task C: LangGraph - Relevance Grader (Binary Judge)
+    system_prompt = """You are a "Binary Judge." Evaluate the retrieved documents against the user's question.
     
-    CRITICAL: You must answer with ONLY one word: 'yes' or 'no'. Do not add any explanation."""
+    REQUIREMENT:
+    - If the document is relevant to answering the question, output 'yes'.
+    - If the document is irrelevant (noise), output 'no'.
+    
+    CRITICAL: You must answer with ONLY 'yes' or 'no'. No explanation."""
+
     
     msg = [
         SystemMessage(content=system_prompt),
@@ -127,12 +167,18 @@ def generate_node(state: AgentState):
     documents = state["documents"]
     llm = get_llm() 
     
+    # Task E: LangGraph - Final Generator
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a financial analyst. Use the provided context to answer the question. \n"
-                   "If the context doesn't contain the answer, say you don't know. \n"
-                   "ALWAYS cite the source in brackets (e.g., [Source: Apple]).\n\nContext:\n{context}"),
+        ("system", "You are a professional financial analyst. Synthesize the final answer using the retrieved context.\n\n"
+                   "CONSTRAINTS:\n"
+                   "1. CITATIONS: Strictly cite sources (e.g., [Source: Apple 10-K]).\n"
+                   "2. HONESTY: If the information is missing (even after retries), state 'I don't know' instead of hallucinating.\n"
+                   "3. TEMPORAL ACCURACY: Distinguish between '3 Months Ended' and '12 Months Ended'. Use '2024' (Annual) unless instructed otherwise.\n"
+                   "4. ENGLISH ONLY: The Final Answer must be in English.\n\n"
+                   "Context:\n{context}"),
         ("human", "{question}"),
     ])
+
     
     chain = prompt | llm
     response = chain.invoke({"context": documents, "question": question})
@@ -144,9 +190,11 @@ def rewrite_node(state: AgentState):
     question = state["question"]
     llm = get_llm()
     
+    # Task D: LangGraph - Query Rewriter
     msg = [ 
         HumanMessage(content=f"The previous search for '{question}' yielded irrelevant results. \n"
-                             f"Please rephrase this question to be more specific or use better keywords for a financial search engine. \n"
+                             f"Your goal is to rewrite the original question to be more specific or use better financial terminology. \n"
+                             f"Transformation Requirement: Transform vague queries (e.g., 'how much did they spend on new tech') into precise terms (e.g., 'Research and Development expenses').\n"
                              f"Output ONLY the new question text.")
     ]
     response = llm.invoke(msg)
@@ -215,20 +263,26 @@ def run_legacy_agent(question: str):
 
     llm = get_llm()
 
+    # Task A: LangChain ReAct Agent
     template = """Answer the following questions as best you can. You have access to the following tools:
 
 {tools}
 
-Use the following format:
-
+STRUCTURAL REQUIREMENTS:
+You must strictly follow the ReAct loop format:
 Question: the input question you must answer
-Thought: you should always think about what to do
-Action: the action to take, should be one of [{tool_names}]
-Action Input: the input to the action
-Observation: the result of the action
+Thought: you should always reason about what to do next
+Action: the tool to take, should be one of [{tool_names}]
+Action Input: the specific query to send to the tool
+Observation: the result returned by the tool
 ... (this Thought/Action/Action Input/Observation can repeat N times)
 Thought: I now know the final answer
-Final Answer: the final answer to the original input question
+Final Answer: the conclusion
+
+BEHAVIORAL CONSTRAINTS:
+1. English Only: The Final Answer must be in English, even if the user asks in Chinese.
+2. Year Precision: Distinguish between 2024, 2023, and 2022 columns in financial tables carefully.
+3. Honesty: If the exact 2024 figure is not found, state "I don't know" rather than guessing.
 
 Begin!
 
